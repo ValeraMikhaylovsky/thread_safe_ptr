@@ -1,11 +1,14 @@
 #include <thread>
 #include <memory>
 #include <functional>
+#include <chrono>
 #include <iostream>
 
 #include <QtTest>
 
 #include "../../include/thread_safe_ptr.h"
+
+using namespace std::chrono_literals;
 
 class Counter
 {
@@ -48,20 +51,28 @@ private slots:
 
 private:
     void writeRandomValue() {
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < 1000; ++i) {
             pObj->set(qrand()%1000);
+            std::this_thread::sleep_for(100us);
+        }
     }
     void readRandomValue() {
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < 1000; ++i) {
             pObj->get();
+            std::this_thread::sleep_for(100us);
+        }
     }
     void incrementValue() {
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < 1000; ++i) {
             pObj->increment();
+            std::this_thread::sleep_for(100us);
+        }
     }
     void decrementValue() {
-        for (int i = 0; i < 100; ++i)
+        for (int i = 0; i < 1000; ++i) {
             pObj->decrement();
+            std::this_thread::sleep_for(100us);
+        }
     }
 
 private:
