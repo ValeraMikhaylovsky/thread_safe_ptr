@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <memory>
 #include <thread>
 #include <mutex>
@@ -12,30 +13,22 @@ namespace ts
 template<typename T>
 class thread_safe_ptr
 {
+    template<typename Lock>
     class proxy final {
     public:
-        proxy(T &ref, std::mutex &m) : m_ref(ref), m_mutex(m)
-        {
-            m_mutex.lock();
-            std::cout << "lock in thread " << std::this_thread::get_id() << std::endl;
-        }
-        ~proxy()
-        {
-            std::cout << "unlock in thread " << std::this_thread::get_id() << std::endl;
-            m_mutex.unlock();
-        }
-
+        proxy(T &ref, Lock &m) : m_ref(ref), m_mutex(m)
+        { m_mutex.lock(); }
+        ~proxy() { m_mutex.unlock(); }
         T* operator->() { return &m_ref; }
         const T* operator->() const { return &m_ref; }
-
     private:
-        T &m_ref;
-        std::mutex &m_mutex;
+        T    &m_ref;
+        Lock &m_mutex;
     };
 
 public:
     thread_safe_ptr() noexcept = default;
-    thread_safe_ptr(std::shared_ptr<T> p) : m_mutex(std::make_shared<std::mutex>()), m_ptr(p) {}
+    thread_safe_ptr(std::shared_ptr<T> p) : m_mutex(std::make_shared<std::recursive_mutex>()), m_ptr(p) {}
     thread_safe_ptr(const thread_safe_ptr<T> &p) : m_mutex(p.m_mutex), m_ptr(p.m_ptr) {}
     thread_safe_ptr(thread_safe_ptr<T> &&p) noexcept = default;
 
@@ -44,7 +37,7 @@ public:
         if (this != &ref) {
             if (m_mutex) {
                 auto t_mutex = m_mutex;
-                std::lock_guard<std::mutex> t_locker(*t_mutex.get());
+                std::lock_guard<std::recursive_mutex> t_locker(*t_mutex.get());
 
                 m_mutex = ref.m_mutex;
                 m_ptr   = ref.m_ptr;
@@ -62,13 +55,13 @@ public:
         if (m_ptr != ref) {
             if (m_mutex) {
                 auto t_mutex = m_mutex;
-                std::lock_guard<std::mutex> t_locker(*t_mutex.get());
+                std::lock_guard<std::recursive_mutex> t_locker(*t_mutex.get());
 
-                m_mutex = std::make_shared<std::mutex>();
+                m_mutex = std::make_shared<std::recursive_mutex>();
                 m_ptr   = ref;
             }
             else {
-                m_mutex = std::make_shared<std::mutex>();
+                m_mutex = std::make_shared<std::recursive_mutex>();
                 m_ptr   = ref;
             }
         }
@@ -77,8 +70,8 @@ public:
 
     T* get() const { m_ptr.get(); }
 
-    proxy operator->()              { return proxy(*get_for_write(), *m_mutex.get()); }
-    const proxy operator->() const  { return proxy(*get_for_read() , *m_mutex.get()); }
+    proxy<std::recursive_mutex> operator->()              { return proxy<std::recursive_mutex>(*get_for_write(), *m_mutex.get()); }
+    const proxy<std::recursive_mutex> operator->() const  { return proxy<std::recursive_mutex>(*get_for_read() , *m_mutex.get()); }
 
     operator bool() const noexcept { return m_ptr.get() != nullptr; }
 
@@ -88,7 +81,7 @@ private:
 
 private:
     std::shared_ptr<T> m_ptr;
-    mutable std::shared_ptr<std::mutex> m_mutex;
+    mutable std::shared_ptr<std::recursive_mutex> m_mutex;
 };
 
 } // namespace ts
