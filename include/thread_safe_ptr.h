@@ -7,6 +7,8 @@
 #include <cassert>
 #include <iostream>
 
+#include "spin_lock.h"
+
 namespace ts
 {
 
@@ -68,7 +70,7 @@ public:
         return *this;
     }
 
-    T* get() const { m_ptr.get(); }
+    T* get() const noexcept { return m_ptr.get(); }
 
     proxy<std::recursive_mutex> operator->()              { return proxy<std::recursive_mutex>(*get_for_write(), *m_mutex.get()); }
     const proxy<std::recursive_mutex> operator->() const  { return proxy<std::recursive_mutex>(*get_for_read() , *m_mutex.get()); }
