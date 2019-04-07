@@ -13,25 +13,25 @@ using namespace std::chrono_literals;
 class Counter
 {
 public:
-    Counter() = default;
-    int get() const {
-        std::cout << Q_FUNC_INFO << count << std::endl;
+    Counter() noexcept = default;
+    int get() const noexcept {
         return count;
     }
-    void set(int newCount) {
-        std::cout << Q_FUNC_INFO << newCount << std::endl;
+    void set(int newCount) noexcept {
         count = newCount;
     }
 
-    void increment() {
+    void increment() noexcept {
         ++count;
-        std::cout << Q_FUNC_INFO << count << std::endl;
     }
 
-    void decrement() {
+    void decrement() noexcept {
         --count;
-        std::cout << Q_FUNC_INFO << count << std::endl;
     }
+
+    bool valid() const noexcept { return count >= 0; }
+
+    bool invalid() const noexcept { return count < 0; }
 
 private:
     int count {0};
@@ -48,31 +48,41 @@ public:
 private slots:
     void test_change_value();
     void test_change_value_in_threads();
+    void test_deadlock();
+    void test_copy();
+
+    void bench_single_call();
+    void bench_multiple_call();
 
 private:
     void writeRandomValue() {
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < 10; ++i) {
             pObj->set(qrand()%1000);
-            std::this_thread::sleep_for(100us);
+            std::this_thread::sleep_for(1ms);
         }
     }
     void readRandomValue() {
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < 10; ++i) {
             pObj->get();
-            std::this_thread::sleep_for(100us);
+            std::this_thread::sleep_for(1ms);
         }
     }
     void incrementValue() {
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < 10; ++i) {
             pObj->increment();
-            std::this_thread::sleep_for(100us);
+            std::this_thread::sleep_for(1ms);
         }
     }
     void decrementValue() {
-        for (int i = 0; i < 1000; ++i) {
+        for (int i = 0; i < 10; ++i) {
             pObj->decrement();
-            std::this_thread::sleep_for(100us);
+            std::this_thread::sleep_for(1ms);
         }
+    }
+
+    void setValueInThread(ts::thread_safe_ptr<Counter> p, int value) {
+        if (p)
+            p->set(value);
     }
 
 private:
@@ -116,6 +126,50 @@ void thread_safe::test_change_value_in_threads()
     for (auto &p : m_threads) {
         if (p->joinable())
             p->join();
+    }
+}
+
+void thread_safe::test_deadlock()
+{
+    ts::thread_safe_ptr<Counter> pCounter(std::make_shared<Counter>());
+
+    pCounter->set(3);
+
+    if (pCounter->valid() && (pCounter->get() == 3)) {
+        QCOMPARE(pCounter->get(), 3);
+    }
+}
+
+void thread_safe::test_copy()
+{
+    ts::thread_safe_ptr<Counter> pCounter(std::make_shared<Counter>());
+    QCOMPARE(pCounter->get(), 0);
+
+    std::thread t_thread(std::bind(std::bind(&thread_safe::setValueInThread, this, pCounter, 27)));
+    if (t_thread.joinable())
+        t_thread.join();
+
+    QCOMPARE(pCounter->get(), 27);
+}
+
+void thread_safe::bench_single_call()
+{
+    ts::thread_safe_ptr<Counter> pCounter(std::make_shared<Counter>());
+
+    QBENCHMARK {
+        pCounter->get();
+        pCounter->increment();
+    }
+}
+
+void thread_safe::bench_multiple_call()
+{
+    ts::thread_safe_ptr<Counter> pCounter(std::make_shared<Counter>());
+
+    QBENCHMARK {
+        if (pCounter->valid() && (pCounter->get() == 0) && !pCounter->invalid()) {
+            pCounter->increment();
+        }
     }
 }
 
